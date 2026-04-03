@@ -16,7 +16,7 @@ async function seedAdmin() {
     const users = db.collection("users");
 
     const adminEmail = "admin@gmail.com";
-    const adminPassword = "admin123";
+    const adminPassword = "123";
 
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
