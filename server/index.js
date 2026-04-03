@@ -16,24 +16,28 @@ dotenv.config();
 const app = express();
 
 // =========================
-// ✅ CORS FIX (SAFE)
+// ✅ CORS FIX (IMPORTANT)
 // =========================
 app.use(cors({
-  origin: "*",
+  origin: [
+    "http://localhost:3000",
+    "https://client-ruddy-rho.vercel.app"
+  ],
   credentials: true
 }));
 
 app.use(express.json());
 
 // =========================
-// ✅ CONNECT MONGODB (SAFE)
+// ✅ CONNECT MONGODB
 // =========================
 const connectDB = async () => {
   try {
-    await mongoose.connect(
-      process.env.MONGO_URI ||
-      "mongodb+srv://Dhruv:Dhruv123@cluster0.ddark6d.mongodb.net/indian_garment"
-    );
+    if (!process.env.MONGO_URI) {
+      throw new Error("MONGO_URI missing in env");
+    }
+
+    await mongoose.connect(process.env.MONGO_URI);
     console.log("✅ MongoDB connected");
   } catch (err) {
     console.error("❌ MongoDB connection error:", err.message);
@@ -115,6 +119,11 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
+// ✅ FIX: avoid "Cannot GET"
+app.get("/api/register", (req, res) => {
+  res.send("⚠️ Use POST for register");
+});
+
 // =========================
 // ✅ LOGIN
 // =========================
@@ -138,6 +147,11 @@ app.post("/api/login", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ✅ FIX: avoid "Cannot GET"
+app.get("/api/login", (req, res) => {
+  res.send("⚠️ Use POST for login");
 });
 
 // =========================
@@ -167,7 +181,7 @@ app.get("/api/products", async (req, res) => {
       ];
     }
 
-    const products = await Product.find(query).sort({ createdAt: -1 });
+    const products = await Product.find().sort({ createdAt: -1 });
     res.json(products);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -190,13 +204,21 @@ app.post("/api/products", async (req, res) => {
 // ✅ ADDRESS
 // =========================
 app.get("/api/checkout/addresses/:email", async (req, res) => {
-  const data = await Address.find({ userEmail: req.params.email });
-  res.json(data);
+  try {
+    const data = await Address.find({ userEmail: req.params.email });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post("/api/checkout/addresses", async (req, res) => {
-  const address = await Address.create(req.body);
-  res.json(address);
+  try {
+    const address = await Address.create(req.body);
+    res.json(address);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // =========================
@@ -224,8 +246,12 @@ app.post("/api/checkout/create-order", async (req, res) => {
 });
 
 app.get("/api/checkout/orders/:email", async (req, res) => {
-  const orders = await Order.find({ "user.email": req.params.email });
-  res.json(orders);
+  try {
+    const orders = await Order.find({ "user.email": req.params.email });
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // =========================
@@ -234,7 +260,7 @@ app.get("/api/checkout/orders/:email", async (req, res) => {
 app.use("/api/admin", adminRoutes);
 
 // =========================
-// ✅ START SERVER AFTER DB
+// ✅ START SERVER
 // =========================
 const PORT = process.env.PORT || 5000;
 
