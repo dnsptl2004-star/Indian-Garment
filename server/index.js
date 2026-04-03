@@ -264,8 +264,27 @@ app.use("/api/admin", adminRoutes);
 // =========================
 const PORT = process.env.PORT || 5000;
 
-connectDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-  });
-});
+const startServer = async () => {
+  try {
+    // 🔍 DEBUG (remove later if needed)
+    console.log("MONGO_URI:", process.env.MONGO_URI ? "FOUND" : "MISSING");
+
+    // ✅ CONNECT DB FIRST (NO BUFFER ERROR)
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 5000,
+    });
+
+    console.log("✅ MongoDB connected");
+
+    // ✅ START SERVER ONLY AFTER DB
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
+
+  } catch (err) {
+    console.error("❌ DB CONNECTION FAILED:", err.message);
+    process.exit(1); // 🔥 stop app if DB fails
+  }
+};
+
+startServer();
