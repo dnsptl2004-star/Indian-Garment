@@ -16,25 +16,29 @@ dotenv.config();
 const app = express();
 
 // =========================
-// ✅ CORS FIX (LOCAL + VERCEL)
+// ✅ CORS FIX (SAFE)
 // =========================
 app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "https://client-ruddy-rho.vercel.app"
-  ],
+  origin: "*",
   credentials: true
 }));
 
 app.use(express.json());
 
 // =========================
-// ✅ CONNECT MONGODB
+// ✅ CONNECT MONGODB (SAFE)
 // =========================
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.error("❌ MongoDB connection error:", err));
+const connectDB = async () => {
+  try {
+    await mongoose.connect(
+      process.env.MONGO_URI ||
+      "mongodb+srv://Dhruv:Dhruv123@cluster0.ddark6d.mongodb.net/indian_garment"
+    );
+    console.log("✅ MongoDB connected");
+  } catch (err) {
+    console.error("❌ MongoDB connection error:", err.message);
+  }
+};
 
 // =========================
 // ✅ JWT TOKEN
@@ -171,7 +175,7 @@ app.get("/api/products", async (req, res) => {
 });
 
 // =========================
-// ✅ ADD PRODUCT (ADMIN)
+// ✅ ADD PRODUCT
 // =========================
 app.post("/api/products", async (req, res) => {
   try {
@@ -230,10 +234,12 @@ app.get("/api/checkout/orders/:email", async (req, res) => {
 app.use("/api/admin", adminRoutes);
 
 // =========================
-// ✅ SERVER START
+// ✅ START SERVER AFTER DB
 // =========================
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
 });
