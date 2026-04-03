@@ -77,21 +77,29 @@ router.post("/confirm-upi", authMiddleware, async (req, res) => {
 // ✅ ❗ FIXED CANCEL ORDER ROUTE
 router.delete("/orders/:id", authMiddleware, async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id).populate('user', 'email');
-    
+    const order = await Order.findById(req.params.id);
+
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    if (order.user.email !== req.user.email) {
+    const orderEmail = order.user?.email?.toLowerCase();
+    const requesterEmail = req.user?.email?.toLowerCase();
+
+    if (!orderEmail) {
+      return res.status(400).json({ error: "Order user data incomplete" });
+    }
+
+    if (orderEmail !== requesterEmail && req.user.role !== "admin") {
       return res.status(403).json({ error: "Not authorized for this order" });
     }
 
-    // Optional: restrict cancellation
     if (order.orderStatus === "delivered") {
-      return res.status(400).json({
-        error: "Delivered orders cannot be cancelled",
-      });
+      return res.status(400).json({ error: "Delivered orders cannot be cancelled" });
+    }
+
+    if (order.orderStatus === "cancelled") {
+      return res.status(400).json({ error: "Order already cancelled" });
     }
 
     order.orderStatus = "cancelled";
