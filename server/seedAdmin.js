@@ -1,13 +1,12 @@
-import dotenv from "dotenv";
+﻿import dotenv from "dotenv";
 import { MongoClient } from "mongodb";
 import bcrypt from "bcryptjs";
 
 dotenv.config();
 
 const uri = process.env.MONGO_URI;
-
 if (!uri) {
-  console.error("MONGO_URI is missing in .env file");
+  console.error("MONGO_URI missing");
   process.exit(1);
 }
 
@@ -16,12 +15,11 @@ async function seedAdmin() {
 
   try {
     await client.connect();
-    const db = client.db("indian_garment");
+    const db = client.db();
     const users = db.collection("users");
 
     const adminEmail = "admin@gmail.com";
     const adminPassword = "123";
-
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
     const result = await users.updateOne(
@@ -41,15 +39,10 @@ async function seedAdmin() {
       { upsert: true }
     );
 
-    if (result.upsertedId) {
-      console.log("✅ Admin created");
-    } else if (result.modifiedCount > 0) {
-      console.log("⚡ Admin already existed, updated");
-    } else {
-      console.log("ℹ️ No changes made");
-    }
+    if (result.upsertedCount > 0) console.log("✅ Admin created");
+    else console.log("⚡ Admin updated");
   } catch (err) {
-    console.error("❌ Error seeding admin:", err);
+    console.error("❌ Seed error:", err.message);
   } finally {
     await client.close();
   }

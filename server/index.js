@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
@@ -15,78 +15,47 @@ dotenv.config();
 
 const app = express();
 
-// =========================
-// ✅ CORS
-// =========================
-app.use(
-  cors({
-    origin: [
-      "http://localhost:3000",
-      "https://client-ruddy-rho.vercel.app",
-    ],
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: ["http://localhost:3000", "http://localhost:5173", "https://client-ruddy-rho.vercel.app"],
+  credentials: true
+}));
 
 app.use(express.json());
 
-// =========================
-// ✅ JWT TOKEN
-// =========================
 const makeToken = (user) =>
   jwt.sign(
-    {
-      id: user._id,
-      email: user.email,
-      isAdmin: user.isAdmin, // ✅ use only this
-    },
+    { id: user._id, email: user.email, role: user.role },
     process.env.JWT_SECRET || "secret123",
     { expiresIn: "7d" }
   );
 
-// =========================
-// ✅ AUTH MIDDLEWARE
-// =========================
 const protect = (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ error: "No token" });
-
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "secret123"
-    );
-
-    req.user = decoded;
+    req.user = jwt.verify(token, process.env.JWT_SECRET || "secret123");
     next();
   } catch {
     res.status(401).json({ error: "Invalid token" });
   }
 };
 
-// =========================
-// ✅ ADMIN MIDDLEWARE
-// =========================
 const adminOnly = (req, res, next) => {
-  if (!req.user?.isAdmin) {
-    return res.status(403).json({ error: "Admin only access" });
-  }
+  if (req.user?.role !== "admin") return res.status(403).json({ error: "Admin only" });
   next();
 };
 
-// =========================
-// ✅ ROOT
-// =========================
-app.get("/", (req, res) => {
-  res.send("✅ Backend is LIVE");
-});
+app.get("/", (_req, res) => res.send("✅ Backend is LIVE"));
+app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
-// =========================
-// ✅ REGISTER
-// =========================
 app.post("/api/register", async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { name, username, email, password } = req.body;
+    const finalName = name || username;
+
+    if (!finalName || !email || !password) {
+      return res.status(400).json({ error: "All fields required" });
+    }
 
     const exists = await User.findOne({ email });
     if (exists) return res.status(409).json({ error: "Email exists" });
@@ -94,23 +63,18 @@ app.post("/api/register", async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
-      username,
+      name: finalName,
       email,
       password: hashedPassword,
-      isAdmin: false,
+      role: "user",
     });
 
-    const token = makeToken(user);
-
-    res.json({ token, user });
+    res.json({ message: "Registered", token: makeToken(user), user });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// =========================
-// ✅ LOGIN
-// =========================
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -121,103 +85,112 @@ app.post("/api/login", async (req, res) => {
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
-    const token = makeToken(user);
-
     res.json({
-      token,
-      user, // ✅ includes isAdmin
+      message: "Login successful",
+      token: makeToken(user),
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// =========================
-// ✅ CURRENT USER
-// =========================
 app.get("/api/me", protect, async (req, res) => {
-  const user = await User.findById(req.user.id);
-  res.json({ user });
+  try {
+    const user = await User.findById(req.user.id).select("-password");
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// =========================
-// ✅ PRODUCTS (PUBLIC)
-// =========================
-app.get("/api/products", async (req, res) => {
-  const products = await Product.find().sort({ createdAt: -1 });
-  res.json(products);
+app.get("/api/products", async (_req, res) => {
+  try {
+    const products = await Product.find().sort({ createdAt: -1 });
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// =========================
-// ✅ PRODUCTS (ADMIN ONLY)
-// =========================
 app.post("/api/products", protect, adminOnly, async (req, res) => {
-  const product = await Product.create(req.body);
-  res.json(product);
+  try {
+    const product = await Product.create(req.body);
+    res.status(201).json(product);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// =========================
-// ✅ ADDRESS
-// =========================
 app.get("/api/checkout/addresses/:email", async (req, res) => {
-  const data = await Address.find({ userEmail: req.params.email });
-  res.json(data);
+  try {
+    const data = await Address.find({ userEmail: req.params.email }).sort({ createdAt: -1 });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post("/api/checkout/addresses", async (req, res) => {
-  const address = await Address.create(req.body);
-  res.json(address);
+  try {
+    const address = await Address.create(req.body);
+    res.json(address);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// =========================
-// ✅ ORDER
-// =========================
 app.post("/api/checkout/create-order", async (req, res) => {
-  const { user, items, shippingAddress } = req.body;
+  try {
+    const { user, items = [], shippingAddress } = req.body;
 
-  const totalAmount = items.reduce((sum, i) => sum + i.price, 0);
+    if (!items.length) return res.status(400).json({ error: "Cart is empty" });
 
-  const order = await Order.create({
-    user,
-    items,
-    shippingAddress,
-    totalAmount,
-    paymentStatus: "pending",
-    orderStatus: "pending",
-  });
+    const totalAmount = items.reduce((sum, i) => sum + Number(i.price || 0), 0);
 
-  res.json(order);
+    const order = await Order.create({
+      user,
+      items,
+      shippingAddress,
+      totalAmount,
+      paymentStatus: "pending",
+      orderStatus: "pending",
+    });
+
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/checkout/orders/:email", async (req, res) => {
-  const orders = await Order.find({
-    "user.email": req.params.email,
-  });
-  res.json(orders);
+  try {
+    const orders = await Order.find({ "user.email": req.params.email }).sort({ createdAt: -1 });
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// =========================
-// ✅ ADMIN ROUTES (PROTECTED)
-// =========================
 app.use("/api/admin", protect, adminOnly, adminRoutes);
 
-// =========================
-// ✅ START SERVER
-// =========================
 const PORT = process.env.PORT || 5000;
 
-const startServer = async () => {
+async function startServer() {
   try {
+    if (!process.env.MONGO_URI) throw new Error("MONGO_URI missing");
     await mongoose.connect(process.env.MONGO_URI);
     console.log("✅ MongoDB connected");
-
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on ${PORT}`);
-    });
+    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   } catch (err) {
     console.error("❌ DB ERROR:", err.message);
     process.exit(1);
   }
-};
+}
 
 startServer();
