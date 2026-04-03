@@ -16,7 +16,7 @@ dotenv.config();
 const app = express();
 
 // =========================
-// ✅ CORS FIX (IMPORTANT)
+// ✅ CORS FIX (FINAL)
 // =========================
 app.use(cors({
   origin: [
@@ -27,22 +27,6 @@ app.use(cors({
 }));
 
 app.use(express.json());
-
-// =========================
-// ✅ CONNECT MONGODB
-// =========================
-const connectDB = async () => {
-  try {
-    if (!process.env.MONGO_URI) {
-      throw new Error("MONGO_URI missing in env");
-    }
-
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("✅ MongoDB connected");
-  } catch (err) {
-    console.error("❌ MongoDB connection error:", err.message);
-  }
-};
 
 // =========================
 // ✅ JWT TOKEN
@@ -70,7 +54,7 @@ const protect = (req, res, next) => {
     req.user = decoded;
 
     next();
-  } catch (err) {
+  } catch {
     res.status(401).json({ error: "Invalid token" });
   }
 };
@@ -109,17 +93,14 @@ app.post("/api/register", async (req, res) => {
 
     const token = makeToken(user);
 
-    res.json({
-      message: "✅ Registered",
-      token,
-      user
-    });
+    res.json({ message: "✅ Registered", token, user });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ✅ FIX: avoid "Cannot GET"
+// prevent GET error
 app.get("/api/register", (req, res) => {
   res.send("⚠️ Use POST for register");
 });
@@ -139,17 +120,14 @@ app.post("/api/login", async (req, res) => {
 
     const token = makeToken(user);
 
-    res.json({
-      message: "✅ Login successful",
-      token,
-      user
-    });
+    res.json({ message: "✅ Login successful", token, user });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ✅ FIX: avoid "Cannot GET"
+// prevent GET error
 app.get("/api/login", (req, res) => {
   res.send("⚠️ Use POST for login");
 });
@@ -158,8 +136,12 @@ app.get("/api/login", (req, res) => {
 // ✅ CURRENT USER
 // =========================
 app.get("/api/me", protect, async (req, res) => {
-  const user = await User.findById(req.user.id);
-  res.json({ user });
+  try {
+    const user = await User.findById(req.user.id);
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // =========================
@@ -167,20 +149,6 @@ app.get("/api/me", protect, async (req, res) => {
 // =========================
 app.get("/api/products", async (req, res) => {
   try {
-    const { category, search } = req.query;
-    const query = {};
-
-    if (category && category !== "all") {
-      query.category = { $regex: category, $options: "i" };
-    }
-
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-      ];
-    }
-
     const products = await Product.find().sort({ createdAt: -1 });
     res.json(products);
   } catch (err) {
@@ -260,30 +228,29 @@ app.get("/api/checkout/orders/:email", async (req, res) => {
 app.use("/api/admin", adminRoutes);
 
 // =========================
-// ✅ START SERVER
+// ✅ START SERVER (FINAL FIX)
 // =========================
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
-    // 🔍 DEBUG (remove later if needed)
-    console.log("MONGO_URI:", process.env.MONGO_URI ? "FOUND" : "MISSING");
+    if (!process.env.MONGO_URI) {
+      throw new Error("MONGO_URI missing");
+    }
 
-    // ✅ CONNECT DB FIRST (NO BUFFER ERROR)
     await mongoose.connect(process.env.MONGO_URI, {
       serverSelectionTimeoutMS: 5000,
     });
 
     console.log("✅ MongoDB connected");
 
-    // ✅ START SERVER ONLY AFTER DB
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
 
   } catch (err) {
-    console.error("❌ DB CONNECTION FAILED:", err.message);
-    process.exit(1); // 🔥 stop app if DB fails
+    console.error("❌ DB ERROR:", err.message);
+    process.exit(1);
   }
 };
 
