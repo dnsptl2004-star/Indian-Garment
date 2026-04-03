@@ -1,4 +1,4 @@
-import dotenv from "dotenv";
+﻿import dotenv from "dotenv";
 import { MongoClient } from "mongodb";
 import bcrypt from "bcryptjs";
 
@@ -22,7 +22,7 @@ async function seedAdmin() {
     const adminPassword = "123";
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
-    const result = await users.updateOne(
+    await users.updateOne(
       { email: adminEmail },
       {
         $set: {
@@ -32,17 +32,14 @@ async function seedAdmin() {
           role: "admin",
           updatedAt: new Date(),
         },
-        $setOnInsert: {
-          createdAt: new Date(),
-        },
+        $setOnInsert: { createdAt: new Date() },
       },
       { upsert: true }
     );
 
-    if (result.upsertedCount > 0) console.log("? Admin created");
-    else console.log("? Admin updated");
+    console.log("✅ Admin seeded");
   } catch (err) {
-    console.error("? Seed error:", err.message);
+    console.error("❌ Seed error:", err.message);
   } finally {
     await client.close();
   }

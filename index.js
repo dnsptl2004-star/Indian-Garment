@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
@@ -45,7 +45,7 @@ const adminOnly = (req, res, next) => {
   next();
 };
 
-app.get("/", (_req, res) => res.send("? Backend is LIVE"));
+app.get("/", (_req, res) => res.send("✅ Backend is LIVE"));
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 app.post("/api/register", async (req, res) => {
@@ -168,7 +168,7 @@ app.post("/api/checkout/create-order", async (req, res) => {
   }
 });
 
-app.get("/api/checkout/orders/:email", async (req, res) => {
+app.get("/api/checkout/orders/:email", protect, async (req, res) => {
   try {
     const orders = await Order.find({ "user.email": req.params.email }).sort({ createdAt: -1 });
     res.json(orders);
@@ -185,10 +185,10 @@ async function startServer() {
   try {
     if (!process.env.MONGO_URI) throw new Error("MONGO_URI missing");
     await mongoose.connect(process.env.MONGO_URI);
-    console.log("? MongoDB connected");
-    app.listen(PORT, () => console.log(`?? Server running on port ${PORT}`));
+    console.log("✅ MongoDB connected");
+    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   } catch (err) {
-    console.error("? DB ERROR:", err.message);
+    console.error("❌ DB ERROR:", err.message);
     process.exit(1);
   }
 }
