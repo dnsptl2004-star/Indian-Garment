@@ -10,6 +10,9 @@ import Product from "./models/Product.js";
 import Address from "./models/Address.js";
 import Order from "./models/Order.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import checkoutRoutes from "./routes/checkout.js";
+
+app.use("/api/checkout", checkoutRoutes);
 
 dotenv.config();
 
