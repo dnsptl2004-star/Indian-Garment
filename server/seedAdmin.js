@@ -1,11 +1,15 @@
-// seedAdmin.js
 import dotenv from "dotenv";
 import { MongoClient } from "mongodb";
 import bcrypt from "bcryptjs";
 
 dotenv.config();
 
-const uri = process.env.MONGO_URI || "mongodb+srv://Dhruv:Dhruv123@cluster0.ddark6d.mongodb.net/indian_garment?retryWrites=true&w=majority";
+const uri = process.env.MONGO_URI;
+
+if (!uri) {
+  console.error("MONGO_URI is missing in .env file");
+  process.exit(1);
+}
 
 async function seedAdmin() {
   const client = new MongoClient(uri);
@@ -37,13 +41,15 @@ async function seedAdmin() {
       { upsert: true }
     );
 
-    if (result.upsertedCount > 0) {
+    if (result.upsertedId) {
       console.log("✅ Admin created");
+    } else if (result.modifiedCount > 0) {
+      console.log("⚡ Admin already existed, updated");
     } else {
-      console.log("⚡ Admin already exists, updated");
+      console.log("ℹ️ No changes made");
     }
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error seeding admin:", err);
   } finally {
     await client.close();
   }
