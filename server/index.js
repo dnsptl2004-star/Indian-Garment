@@ -1,24 +1,143 @@
 import express from "express";
 import cors from "cors";
+import mongoose from "mongoose";
 
 const app = express();
 
-app.use(cors());
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 
-// ✅ ROOT ROUTE
+// =========================
+// ✅ CONNECT MONGODB
+// =========================
+await mongoose.connect(process.env.MONGO_URI);
+console.log("✅ MongoDB Connected");
+
+// =========================
+// ✅ SCHEMAS
+// =========================
+const userSchema = new mongoose.Schema({
+  email: String,
+  password: String,
+  role: { type: String, default: "user" } // 👈 admin support
+});
+
+const productSchema = new mongoose.Schema({
+  name: String,
+  price: Number,
+  category: String,
+  img: String,
+  description: String
+});
+
+const User = mongoose.model("User", userSchema);
+const Product = mongoose.model("Product", productSchema);
+
+// =========================
+// ✅ ROOT
+// =========================
 app.get("/", (req, res) => {
-  res.send("✅ Backend is LIVE");
+  res.send("✅ Backend is LIVE with DB");
 });
 
-// ✅ PRODUCTS ROUTE
-app.get("/api/products", (req, res) => {
-  res.json([
-    { name: "Kurta", price: 999 },
-    { name: "Shirt", price: 1299 }
-  ]);
+// =========================
+// ✅ PRODUCTS (GET ALL)
+// =========================
+app.get("/api/products", async (req, res) => {
+  try {
+    const products = await Product.find();
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
+// =========================
+// ✅ ADMIN: ADD PRODUCT
+// =========================
+app.post("/api/admin/add-product", async (req, res) => {
+  try {
+    const product = new Product(req.body);
+    await product.save();
+
+    res.json({ message: "✅ Product added", product });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =========================
+// ✅ ADMIN: DELETE PRODUCT
+// =========================
+app.delete("/api/admin/delete-product/:id", async (req, res) => {
+  try {
+    await Product.findByIdAndDelete(req.params.id);
+    res.json({ message: "🗑 Product deleted" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =========================
+// ✅ REGISTER
+// =========================
+app.post("/api/register", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const exist = await User.findOne({ email });
+    if (exist) {
+      return res.status(400).json({ error: "User already exists" });
+    }
+
+    const newUser = new User({ email, password });
+    await newUser.save();
+
+    res.json({
+      message: "✅ Registration successful",
+      user: newUser
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =========================
+// ✅ LOGIN
+// =========================
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findOne({ email, password });
+
+    if (!user) {
+      return res.status(400).json({ error: "Invalid credentials" });
+    }
+
+    res.json({
+      message: "✅ Login successful",
+      user
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =========================
+// ✅ OPTIONAL GET (NO ERROR)
+// =========================
+app.get("/api/login", (req, res) => {
+  res.send("Use POST method");
+});
+
+app.get("/api/register", (req, res) => {
+  res.send("Use POST method");
+});
+
+// =========================
+// ✅ SERVER START
+// =========================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
