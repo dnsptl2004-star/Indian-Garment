@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import Order from "../models/Order.js";
 import { protect as authMiddleware } from "../middleware/auth.js";
 
@@ -77,14 +78,30 @@ router.post("/confirm-upi", authMiddleware, async (req, res) => {
 // ✅ ❗ FIXED CANCEL ORDER ROUTE
 router.delete("/orders/:id", authMiddleware, async (req, res) => {
   try {
+    console.log("🔍 CANCEL REQUEST:", { 
+      orderId: req.params.id, 
+      isValidId: mongoose.Types.ObjectId.isValid(req.params.id),
+      user: req.user?.email,
+      path: req.path 
+    });
+
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      console.log("❌ Invalid ObjectId:", req.params.id);
+      return res.status(400).json({ error: "Invalid order id" });
+    }
+
     const order = await Order.findById(req.params.id);
+    console.log("🔍 Found order:", !!order, order?._id, order?.user?.email);
 
     if (!order) {
+      console.log("❌ Order not found for ID:", req.params.id);
       return res.status(404).json({ error: "Order not found" });
     }
 
     const orderEmail = order.user?.email?.toLowerCase();
     const requesterEmail = req.user?.email?.toLowerCase();
+
+    console.log("🔍 Auth check:", { orderEmail, requesterEmail, userRole: req.user?.role });
 
     if (!orderEmail) {
       return res.status(400).json({ error: "Order user data incomplete" });
@@ -107,8 +124,10 @@ router.delete("/orders/:id", authMiddleware, async (req, res) => {
 
     await order.save();
 
+    console.log("✅ Order cancelled:", order._id);
     res.json({ message: "Order cancelled successfully" });
   } catch (err) {
+    console.error("💥 Cancel order ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });
