@@ -4,14 +4,24 @@ import mongoose from "mongoose";
 
 const app = express();
 
+// =========================
+// ✅ MIDDLEWARE
+// =========================
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 // =========================
-// ✅ CONNECT MONGODB
+// ✅ CONNECT MONGODB (SAFE)
 // =========================
-await mongoose.connect(process.env.MONGO_URI);
-console.log("✅ MongoDB Connected");
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log("✅ MongoDB Connected");
+  } catch (err) {
+    console.error("❌ MongoDB Error:", err.message);
+    process.exit(1);
+  }
+};
 
 // =========================
 // ✅ SCHEMAS
@@ -19,7 +29,7 @@ console.log("✅ MongoDB Connected");
 const userSchema = new mongoose.Schema({
   email: String,
   password: String,
-  role: { type: String, default: "user" } // 👈 admin support
+  role: { type: String, default: "user" }
 });
 
 const productSchema = new mongoose.Schema({
@@ -34,7 +44,7 @@ const User = mongoose.model("User", userSchema);
 const Product = mongoose.model("Product", productSchema);
 
 // =========================
-// ✅ ROOT
+// ✅ ROOT ROUTE
 // =========================
 app.get("/", (req, res) => {
   res.send("✅ Backend is LIVE with DB");
@@ -59,7 +69,6 @@ app.post("/api/admin/add-product", async (req, res) => {
   try {
     const product = new Product(req.body);
     await product.save();
-
     res.json({ message: "✅ Product added", product });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -128,18 +137,20 @@ app.post("/api/login", async (req, res) => {
 // ✅ OPTIONAL GET (NO ERROR)
 // =========================
 app.get("/api/login", (req, res) => {
-  res.send("Use POST method");
+  res.send("⚠️ Use POST method for login");
 });
 
 app.get("/api/register", (req, res) => {
-  res.send("Use POST method");
+  res.send("⚠️ Use POST method for register");
 });
 
 // =========================
-// ✅ SERVER START
+// ✅ START SERVER AFTER DB
 // =========================
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on ${PORT}`);
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on ${PORT}`);
+  });
 });
