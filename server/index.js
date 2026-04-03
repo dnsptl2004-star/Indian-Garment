@@ -10,13 +10,13 @@ import Product from "./models/Product.js";
 import Address from "./models/Address.js";
 import Order from "./models/Order.js";
 import adminRoutes from "./routes/adminRoutes.js";
-import checkoutRoutes from "./routes/checkout.js";
-
-app.use("/api/checkout", checkoutRoutes);
+import checkoutRoutes from "./routes/checkoutRoutes.js";
 
 dotenv.config();
 
 const app = express();
+
+app.use("/api/checkout", checkoutRoutes);
 
 app.use(
   cors({
@@ -24,6 +24,7 @@ app.use(
       "http://localhost:3000",
       "http://localhost:5173",
       "https://client-ruddy-rho.vercel.app",
+      "http://localhost:3001",
     ],
     credentials: true,
   })
@@ -191,81 +192,7 @@ app.post("/api/products", protect, adminOnly, async (req, res) => {
   }
 });
 
-app.get("/api/checkout/addresses/:email", async (req, res) => {
-  try {
-    const data = await Address.find({ userEmail: req.params.email }).sort({
-      createdAt: -1,
-    });
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
-app.post("/api/checkout/addresses", async (req, res) => {
-  try {
-    const address = await Address.create(req.body);
-    res.status(201).json(address);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/checkout/create-order", async (req, res) => {
-  try {
-    const { user, items = [], shippingAddress, paymentMethod = "upi" } = req.body;
-
-    if (!user?.email) {
-      return res.status(400).json({ error: "User is required" });
-    }
-
-    if (!items.length) {
-      return res.status(400).json({ error: "Cart is empty" });
-    }
-
-    if (
-      !shippingAddress?.fullName ||
-      !shippingAddress?.phone ||
-      !shippingAddress?.line1 ||
-      !shippingAddress?.city ||
-      !shippingAddress?.state ||
-      !shippingAddress?.pincode
-    ) {
-      return res.status(400).json({ error: "Shipping address is incomplete" });
-    }
-
-    const totalAmount = items.reduce((sum, i) => {
-      const price = Number(i.price || 0);
-      const qty = Number(i.qty || 1);
-      return sum + price * qty;
-    }, 0);
-
-    const order = await Order.create({
-      user,
-      items,
-      shippingAddress,
-      paymentMethod,
-      totalAmount,
-      paymentStatus: "pending",
-      orderStatus: "pending",
-    });
-
-    res.status(201).json(order);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/checkout/orders/:email", protect, async (req, res) => {
-  try {
-    const orders = await Order.find({ "user.email": req.params.email }).sort({
-      createdAt: -1,
-    });
-    res.json(orders);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 app.patch("/api/admin/orders/:id/status", protect, adminOnly, async (req, res) => {
   try {
