@@ -22,20 +22,20 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// ✅ GLOBAL CORS FIX
+// ☢️ NUCLEAR CORS FIX (Dynamic Origin + Logging)
 app.use(cors({
-  origin: [
-    "https://client-ruddy-rho.vercel.app",
-    "capacitor://localhost",
-    "https://localhost",
-    "http://localhost",
-    "http://localhost:3000",
-    "http://localhost:5173"
-  ],
+  origin: (origin, callback) => {
+    console.log(`📡 REQUEST FROM ORIGIN: ${origin || "NONE (Local/App)"}`);
+    // In Nuclear Mode, we allow everything and LOG what it is to fix the APK.
+    callback(null, true);
+  },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
   credentials: true
 }));
+
+// Apply to options explicitly
+app.options("*", cors());
 
 // ✅ CAPACITOR SPECIFIC ORIGIN FIX
 app.use((req, res, next) => {
