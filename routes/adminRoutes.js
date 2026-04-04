@@ -1,10 +1,22 @@
-﻿import express from "express";
+import express from "express";
+import multer from "multer";
+import path from "path";
 import User from "../models/User.js";
 import Product from "../models/Product.js";
 import Order from "../models/Order.js";
 import Address from "../models/Address.js";
 
 const router = express.Router();
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/");
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname));
+  },
+});
+const upload = multer({ storage });
 
 router.get("/summary", async (req, res) => {
   try {
@@ -62,6 +74,14 @@ router.post("/products", async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+router.post("/upload", upload.single("image"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+  const publicPath = `/uploads/${req.file.filename}`;
+  res.json({ imageUrl: publicPath });
 });
 
 router.put("/products/:id", async (req, res) => {
