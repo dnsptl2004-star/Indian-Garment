@@ -21,23 +21,33 @@ const app = express();
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Vercel-recommended CORS setup
-const corsOptions = {
-  origin: [
+// Vercel-recommended CORS setup - MANUAL IMPLEMENTATION
+// This handles OPTIONS preflight 100% reliably compared to the cors package
+app.use((req, res, next) => {
+  const allowedOrigins = [
     "https://client-ruddy-rho.vercel.app",
     "http://localhost:3000",
     "http://localhost:5173",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173"
-  ],
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-  credentials: true
-};
-
-app.use(cors(corsOptions));
-// Handle preflight requests explicitly
-app.options("*", cors(corsOptions));
+  ];
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else {
+    // Fallback for direct API testing
+    res.setHeader("Access-Control-Allow-Origin", "https://client-ruddy-rho.vercel.app");
+  }
+  
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
 
 const JWT_SECRET = process.env.JWT_SECRET || "secret123";
 
