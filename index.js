@@ -231,12 +231,8 @@ app.get("/api/admin/orders", protect, adminOnly, async (req, res) => {
 
 app.get("/api/admin/addresses", protect, adminOnly, async (req, res) => {
   try {
-    const data = await Address.aggregate([
-      { $lookup: { from: "users", localField: "userEmail", foreignField: "email", as: "u" } },
-      { $unwind: { path: "$u", preserveNullAndEmptyArrays: true } },
-      { $sort: { createdAt: -1 } }
-    ]);
-    res.json(data);
+    const addresses = await Address.find().sort({ createdAt: -1 });
+    res.json(addresses);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
