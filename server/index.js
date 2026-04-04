@@ -27,12 +27,7 @@ app.use("/api/checkout", checkoutRoutes);
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",
-      "http://localhost:5173",
-      "https://client-ruddy-rho.vercel.app",
-      "http://localhost:3001",
-    ],
+    origin: true,
     credentials: true,
   })
 );
