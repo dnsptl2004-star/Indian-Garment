@@ -1,0 +1,6 @@
+https://indian-garment-1.onrender.com/api/ping STATUS: 200
+HEADERS: {"access-control-allow-credentials":"true","access-control-allow-headers":"Content-Type, Authorization, X-Requested-With","access-control-allow-methods":"GET, POST, PUT, DELETE, PATCH, OPTIONS","access-control-allow-origin":"https://client-ruddy-rho.vercel.app","alt-svc":"h3=\":443\"; ma=86400","cf-cache-status":"DYNAMIC","cf-ray":"9e6e54f51d8d2e47-BOM","connection":"keep-alive","content-encoding":"br","content-length":"6","content-type":"text/plain; charset=utf-8","date":"Sat, 04 Apr 2026 06:42:14 GMT","etag":"W/\"2-nOO9QiTIwXgNtWtBJezz8kv3SLc\"","rndr-id":"c65d216a-76f1-4490","server":"cloudflare","vary":"Accept-Encoding","x-powered-by":"Express","x-render-origin-server":"Render"}
+
+https://indian-garment-1.onrender.com/api/checkout/orders/dhruv@gmail.com STATUS: 200
+HEADERS: {"allow":"DELETE, GET, HEAD","alt-svc":"h3=\":443\"; ma=86400","cf-cache-status":"DYNAMIC","cf-ray":"9e6e54f50bfc45a3-BOM","connection":"keep-alive","content-encoding":"br","content-length":"21","content-type":"text/plain","date":"Sat, 04 Apr 2026 06:42:14 GMT","rndr-id":"16321022-005c-42d4","server":"cloudflare","vary":"Accept-Encoding","x-content-type-options":"nosniff","x-powered-by":"Express","x-render-origin-server":"Render"}
+
