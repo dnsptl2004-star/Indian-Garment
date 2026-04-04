@@ -223,6 +223,16 @@ app.get("/api/admin/users", protect, adminOnly, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.patch("/api/admin/users/:id/role", protect, adminOnly, async (req, res) => {
+  try {
+    const { role } = req.body;
+    if (!["user", "admin"].includes(role)) return res.status(400).json({ error: "Invalid role" });
+    const user = await User.findByIdAndUpdate(req.params.id, { $set: { role } }, { new: true });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    res.json(user);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/admin/products", protect, adminOnly, async (req, res) => {
   try { res.json(await Product.find().sort({ createdAt: -1 })); }
   catch (err) { res.status(500).json({ error: err.message }); }
