@@ -249,7 +249,13 @@ app.patch("/api/admin/orders/:id/status", protect, adminOnly, async (req, res) =
 
 // ✅ 404 catch-all
 app.use((req, res) => {
-  res.status(404).json({ error: "Route not found", path: req.path });
+  console.log(`❌ 404: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ 
+    error: "Route not found", 
+    method: req.method,
+    path: req.path,
+    fullUrl: req.originalUrl 
+  });
 });
 
 const PORT = process.env.PORT || 5000;
