@@ -22,7 +22,7 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Vercel-recommended CORS setup
-app.use(cors({
+const corsOptions = {
   origin: [
     "https://client-ruddy-rho.vercel.app",
     "http://localhost:3000",
@@ -30,8 +30,14 @@ app.use(cors({
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173"
   ],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   credentials: true
-}));
+};
+
+app.use(cors(corsOptions));
+// Handle preflight requests explicitly
+app.options("*", cors(corsOptions));
 
 const JWT_SECRET = process.env.JWT_SECRET || "secret123";
 
