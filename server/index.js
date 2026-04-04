@@ -104,21 +104,28 @@ app.get("/api/products", async (_req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post("/api/products", protect, adminOnly, async (req, res) => {
+app.get("/api/admin/products", protect, adminOnly, async (req, res) => {
+  try {
+    const products = await Product.find().sort({ createdAt: -1 });
+    res.json(products);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/admin/products", protect, adminOnly, async (req, res) => {
   try {
     const product = await Product.create(req.body);
     res.status(201).json(product);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.put("/api/products/:id", protect, adminOnly, async (req, res) => {
+app.put("/api/admin/products/:id", protect, adminOnly, async (req, res) => {
   try {
     const product = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(product);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.delete("/api/products/:id", protect, adminOnly, async (req, res) => {
+app.delete("/api/admin/products/:id", protect, adminOnly, async (req, res) => {
   try {
     await Product.findByIdAndDelete(req.params.id);
     res.json({ message: "Product deleted" });
