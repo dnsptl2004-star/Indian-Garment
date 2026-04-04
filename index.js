@@ -162,8 +162,21 @@ app.post("/api/checkout/create-order", async (req, res) => {
   try {
     const { user, items = [], shippingAddress, paymentMethod } = req.body;
     if (!items.length) return res.status(400).json({ error: "Cart is empty" });
-    const totalAmount = items.reduce((sum, i) => sum + Number(i.price || 0), 0);
-    const order = await Order.create({ user, items, shippingAddress, totalAmount, paymentMethod, paymentStatus: "pending", orderStatus: "pending" });
+    const processedItems = items.map(item => ({
+      ...item,
+      size: Array.isArray(item.size) ? (item.size[0] || "Standard") : (item.size || "Standard")
+    }));
+
+    const totalAmount = processedItems.reduce((sum, i) => sum + Number(i.price || 0), 0);
+    const order = await Order.create({ 
+      user, 
+      items: processedItems, 
+      shippingAddress, 
+      totalAmount, 
+      paymentMethod, 
+      paymentStatus: "pending", 
+      orderStatus: "pending" 
+    });
     const upiUrl = paymentMethod === "upi"
       ? `upi://pay?pa=indiangarment@upi&pn=IndianGarment&am=${totalAmount}&cu=INR`
       : null;
