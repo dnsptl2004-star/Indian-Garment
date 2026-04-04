@@ -230,8 +230,14 @@ app.get("/api/admin/orders", protect, adminOnly, async (req, res) => {
 });
 
 app.get("/api/admin/addresses", protect, adminOnly, async (req, res) => {
-  try { res.json(await Address.find().sort({ createdAt: -1 })); }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    const data = await Address.aggregate([
+      { $lookup: { from: "users", localField: "userEmail", foreignField: "email", as: "u" } },
+      { $unwind: { path: "$u", preserveNullAndEmptyArrays: true } },
+      { $sort: { createdAt: -1 } }
+    ]);
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.patch("/api/admin/orders/:id/status", protect, adminOnly, async (req, res) => {
