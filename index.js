@@ -23,20 +23,16 @@ const app = express();
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use((req, res, next) => {
+  console.log(`📡 [${new Date().toISOString()}] ${req.method} ${req.path}`);
   res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
   res.header("Access-Control-Allow-Credentials", "true");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
+  if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
 
-app.use(cors({
-  origin: true,
-  credentials: true
-}));
+app.use(cors({ origin: true, credentials: true }));
 
 app.use(express.json());
 
@@ -190,9 +186,20 @@ app.post("/api/checkout/create-order", async (req, res) => {
 app.get("/api/checkout/orders/:email?", async (req, res) => {
   try {
     const emailToSearch = req.params.email || req.query.email;
-    console.log("🔍 Order fetch search:", emailToSearch);
+    console.log("🔍 [API] Order fetch search:", emailToSearch);
     if (!emailToSearch) return res.status(400).json({ error: "Email required" });
-    
+    const orders = await Order.find({ "user.email": emailToSearch }).sort({ createdAt: -1 });
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/checkout/orders/:email?", async (req, res) => {
+  try {
+    const emailToSearch = req.params.email || req.query.email;
+    console.log("🔍 [ROOT] Order fetch search:", emailToSearch);
+    if (!emailToSearch) return res.status(400).json({ error: "Email required" });
     const orders = await Order.find({ "user.email": emailToSearch }).sort({ createdAt: -1 });
     res.json(orders);
   } catch (error) {
@@ -257,6 +264,17 @@ app.patch("/api/admin/orders/:id/status", protect, adminOnly, async (req, res) =
 });
 
 app.use("/api/admin", protect, adminOnly, adminRoutes);
+
+// Catch-all 404 for debugging
+app.use((req, res) => {
+  console.log(`🚨 404 Route Not Found: ${req.method} ${req.path}`);
+  res.status(404).json({
+    error: "Route not found",
+    method: req.method,
+    path: req.path,
+    serverTime: new Date()
+  });
+});
 
 const PORT = process.env.PORT || 5000;
 
