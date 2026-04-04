@@ -27,6 +27,7 @@ app.use(cors({
   origin: [
     "https://client-ruddy-rho.vercel.app",
     "capacitor://localhost",
+    "https://localhost",
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:5173"
