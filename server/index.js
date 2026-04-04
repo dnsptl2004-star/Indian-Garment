@@ -208,7 +208,10 @@ app.get("/api/admin/summary", protect, adminOnly, async (req, res) => {
       Product.countDocuments(),
       Order.countDocuments()
     ]);
-    const revenue = await Order.aggregate([{ $group: { _id: null, total: { $sum: "$totalAmount" } } }]);
+    const revenue = await Order.aggregate([
+      { $match: { orderStatus: "delivered" } },
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+    ]);
     res.json({ users, products, orders, revenue: revenue[0]?.total || 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
