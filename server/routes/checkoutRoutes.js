@@ -7,9 +7,14 @@ const router = express.Router();
 
 
 // ✅ GET USER ORDERS
-router.get("/orders/:email", async (req, res) => {
+// ✅ GET USER ORDERS
+router.get("/orders/:email?", async (req, res) => {
   try {
-    const orders = await Order.find({ "user.email": req.params.email })
+    const email = req.params.email || req.query.email;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+    const orders = await Order.find({ "user.email": email })
       .sort({ createdAt: -1 });
 
     res.json(orders);

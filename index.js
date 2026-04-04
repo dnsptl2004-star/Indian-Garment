@@ -187,9 +187,13 @@ app.post("/api/checkout/create-order", async (req, res) => {
   }
 });
 
-app.get("/api/checkout/orders/:email", async (req, res) => {
+app.get("/api/checkout/orders/:email?", async (req, res) => {
   try {
-    const orders = await Order.find({ "user.email": req.params.email }).sort({ createdAt: -1 });
+    const email = req.params.email || req.query.email;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+    const orders = await Order.find({ "user.email": email }).sort({ createdAt: -1 });
     res.json(orders);
   } catch (err) {
     res.status(500).json({ error: err.message });
