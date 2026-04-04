@@ -235,11 +235,6 @@ app.patch("/api/admin/orders/:id/status", protect, adminOnly, async (req, res) =
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post("/api/admin/upload", protect, adminOnly, upload.single("image"), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No image file provided" });
-  res.json({ imageUrl: `/uploads/${req.file.filename}` });
-});
-
 // ✅ 404 catch-all
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found", path: req.path });
