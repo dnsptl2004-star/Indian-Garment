@@ -26,19 +26,20 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/checkout", checkoutRoutes);
 
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
   }
   next();
 });
+
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 
 app.use(express.json());
 
@@ -87,6 +88,10 @@ app.get("/", (_req, res) => {
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/api/ping", (_req, res) => {
+  res.json({ message: "pong", time: new Date() });
 });
 
 app.post("/api/register", async (req, res) => {
