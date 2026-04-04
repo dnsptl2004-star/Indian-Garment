@@ -7,7 +7,7 @@ const router = express.Router();
 
 
 // ✅ GET USER ORDERS
-router.get("/orders/:email", authMiddleware, async (req, res) => {
+router.get("/orders/:email", async (req, res) => {
   try {
     const orders = await Order.find({ "user.email": req.params.email })
       .sort({ createdAt: -1 });
@@ -20,7 +20,7 @@ router.get("/orders/:email", authMiddleware, async (req, res) => {
 
 
 // ✅ CREATE ORDER
-router.post("/create-order", authMiddleware, async (req, res) => {
+router.post("/create-order", async (req, res) => {
   try {
     const { user, items, shippingAddress, paymentMethod } = req.body;
 
@@ -55,7 +55,7 @@ router.post("/create-order", authMiddleware, async (req, res) => {
 
 
 // ✅ CONFIRM UPI PAYMENT
-router.post("/confirm-upi", authMiddleware, async (req, res) => {
+router.post("/confirm-upi", async (req, res) => {
   try {
     const { orderId, paymentReference } = req.body;
 
@@ -76,7 +76,7 @@ router.post("/confirm-upi", authMiddleware, async (req, res) => {
 
 
 // ✅ ❗ FIXED CANCEL ORDER ROUTE
-router.delete("/orders/:id", authMiddleware, async (req, res) => {
+router.delete("/orders/:id", async (req, res) => {
   try {
     console.log("🔍 CANCEL REQUEST:", { 
       orderId: req.params.id, 
@@ -96,19 +96,6 @@ router.delete("/orders/:id", authMiddleware, async (req, res) => {
     if (!order) {
       console.log("❌ Order not found for ID:", req.params.id);
       return res.status(404).json({ error: "Order not found" });
-    }
-
-    const orderEmail = order.user?.email?.toLowerCase();
-    const requesterEmail = req.user?.email?.toLowerCase();
-
-    console.log("🔍 Auth check:", { orderEmail, requesterEmail, userRole: req.user?.role });
-
-    if (!orderEmail) {
-      return res.status(400).json({ error: "Order user data incomplete" });
-    }
-
-    if (orderEmail !== requesterEmail && req.user.role !== "admin") {
-      return res.status(403).json({ error: "Not authorized for this order" });
     }
 
     if (order.orderStatus === "delivered") {
