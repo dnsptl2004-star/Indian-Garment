@@ -236,7 +236,7 @@ app.get("/api/admin/orders", protect, adminOnly, async (req, res) => {
 app.get("/api/admin/addresses", protect, adminOnly, async (req, res) => {
   try {
     const addresses = await Address.find().sort({ createdAt: -1 });
-    res.json(addresses);
+    res.json(addresses || []);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
