@@ -20,7 +20,6 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Vercel-recommended CORS setup - MANUAL IMPLEMENTATION
 app.use((req, res, next) => {
@@ -40,6 +39,7 @@ app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin");
   res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -47,6 +47,8 @@ app.use((req, res, next) => {
   
   next();
 });
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const JWT_SECRET = process.env.JWT_SECRET || "secret123";
 
