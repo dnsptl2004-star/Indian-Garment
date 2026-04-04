@@ -22,31 +22,29 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Vercel-recommended CORS setup - MANUAL IMPLEMENTATION
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  const allowed = [
-    "https://client-ruddy-rho.vercel.app", 
-    "http://localhost:3000", 
+// ✅ GLOBAL CORS FIX
+app.use(cors({
+  origin: [
+    "https://client-ruddy-rho.vercel.app",
+    "capacitor://localhost",
+    "http://localhost",
+    "http://localhost:3000",
     "http://localhost:5173"
-  ];
-  
-  if (allowed.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  } else {
-    res.setHeader("Access-Control-Allow-Origin", "https://client-ruddy-rho.vercel.app");
-  }
+  ],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+  credentials: true
+}));
 
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+// ✅ CAPACITOR SPECIFIC ORIGIN FIX
+app.use((req, res, next) => {
+  if (req.headers.origin === "capacitor://localhost") {
+    res.setHeader("Access-Control-Allow-Origin", "capacitor://localhost");
   }
-  
   next();
 });
+
+app.options("*", cors());
 
 const JWT_SECRET = process.env.JWT_SECRET || "secret123";
 
