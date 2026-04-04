@@ -141,7 +141,7 @@ app.post("/api/checkout/addresses", async (req, res) => {
 });
 
 // ✅ Orders - GET (supports both path and query param)
-app.get("/api/checkout/orders/:email?", async (req, res) => {
+app.get("/api/checkout/orders/:email", async (req, res) => {
   try {
     const email = req.params.email || req.query.email;
     if (!email) return res.status(400).json({ error: "Email required" });
