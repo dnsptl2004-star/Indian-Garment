@@ -1,9 +1,11 @@
-﻿import express from "express";
+import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import path from "path";
+import { fileURLToPath } from "url";
 
 import User from "./models/User.js";
 import Product from "./models/Product.js";
@@ -14,7 +16,12 @@ import checkoutRoutes from "./routes/checkoutRoutes.js";
 
 dotenv.config();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use("/api/checkout", checkoutRoutes);
 
@@ -198,9 +205,13 @@ app.patch("/api/admin/orders/:id/status", protect, adminOnly, async (req, res) =
   try {
     const { paymentStatus, orderStatus } = req.body;
 
+    const updateData = {};
+    if (paymentStatus !== undefined) updateData.paymentStatus = paymentStatus;
+    if (orderStatus !== undefined) updateData.orderStatus = orderStatus;
+
     const order = await Order.findByIdAndUpdate(
       req.params.id,
-      { paymentStatus, orderStatus },
+      { $set: updateData },
       { new: true }
     );
 
