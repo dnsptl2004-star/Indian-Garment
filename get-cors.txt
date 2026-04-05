@@ -1,3 +1,0 @@
-https://indian-garment-1.onrender.com/api/checkout/orders/dhruv@gmail.com STATUS: 200
-HEADERS: {"alt-svc":"h3=\":443\"; ma=86400","cf-cache-status":"DYNAMIC","cf-ray":"9e6e6a894d9c6eec-BOM","connection":"keep-alive","content-encoding":"br","content-length":"595","content-type":"application/json; charset=utf-8","date":"Sat, 04 Apr 2026 06:56:58 GMT","etag":"W/\"592-B+XcJJe7eLI1xaOJae1QApdCGtM\"","rndr-id":"a32a2d01-1db7-4d9e","server":"cloudflare","vary":"Accept-Encoding","x-powered-by":"Express","x-render-origin-server":"Render"}
-
