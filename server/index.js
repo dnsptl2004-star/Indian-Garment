@@ -25,6 +25,7 @@ app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   const allowed = [
+    "https://indiangarment.vercel.app",
     "https://client-ruddy-rho.vercel.app", 
     "http://localhost:3000", 
     "http://localhost:5173"
@@ -33,7 +34,7 @@ app.use((req, res, next) => {
   if (allowed.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
   } else {
-    res.setHeader("Access-Control-Allow-Origin", "https://client-ruddy-rho.vercel.app");
+    res.setHeader("Access-Control-Allow-Origin", "https://indiangarment.vercel.app");
   }
 
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
