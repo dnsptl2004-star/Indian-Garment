@@ -22,17 +22,34 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// ☢️ NUCLEAR CORS FIX (Dynamic Origin + Logging)
-app.use(cors({
-  origin: (origin, callback) => {
-    console.log(`📡 REQUEST FROM ORIGIN: ${origin || "NONE (Local/App)"}`);
-    // In Nuclear Mode, we allow everything and LOG what it is to fix the APK.
-    callback(null, true);
-  },
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
-  credentials: true
-}));
+// Vercel-recommended CORS setup - MANUAL IMPLEMENTATION
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowed = [
+    "https://client-ruddy-rho.vercel.app", 
+    "https://indiangarment.vercel.app",
+    "http://localhost:3000", 
+    "http://localhost:5173"
+  ];
+  
+  if (allowed.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else {
+    // Default fallback to the primary live domain
+    res.setHeader("Access-Control-Allow-Origin", "https://client-ruddy-rho.vercel.app");
+  }
+
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  
+  next();
+});
 
 // Apply to options explicitly
 app.options("*", cors());
