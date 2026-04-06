@@ -83,8 +83,12 @@ app.post("/api/register", async (req, res) => {
     const { name, username, email, password } = req.body;
     const finalName = name || username;
     if (!finalName || !email || !password) return res.status(400).json({ error: "All fields required" });
-    if (await User.findOne({ email })) return res.status(409).json({ error: "Email already exists" });
-    const hashed = await bcrypt.hash(password, 10);
+    const [existingUser, hashed] = await Promise.all([
+      User.findOne({ email }),
+      bcrypt.hash(password, 8)
+    ]);
+    if (existingUser) return res.status(409).json({ error: "Email already exists" });
+
     const user = await User.create({ name: finalName, email, password: hashed, role: "user" });
     res.json({ message: "Registered", token: makeToken(user), user: { _id: user._id, name: user.name, email: user.email, role: user.role } });
   } catch (err) { res.status(500).json({ error: err.message }); }
