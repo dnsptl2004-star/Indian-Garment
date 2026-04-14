@@ -72,10 +72,6 @@ const adminOnly = (req, res, next) => {
   next();
 };
 
-// ✅ Health
-app.get("/", (_req, res) => res.send("✅ Indian Garment Backend LIVE"));
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
-app.get("/api/ping", (_req, res) => res.json({ message: "pong", time: new Date() }));
 
 // ✅ Auth
 app.post("/api/register", async (req, res) => {
