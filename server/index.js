@@ -51,10 +51,23 @@ app.use((req, res, next) => {
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// Health check endpoint for keep-alive monitoring
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Cache middleware for static responses
+const cacheMiddleware = (duration) => {
+  return (req, res, next) => {
+    res.set('Cache-Control', `public, max-age=${duration}`);
+    next();
+  };
+};
+
 const JWT_SECRET = process.env.JWT_SECRET || "secret123";
 
 const makeToken = (user) =>
-  jwt.sign({ id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
+  jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
 
 const protect = (req, res, next) => {
   try {
@@ -80,8 +93,8 @@ app.post("/api/register", async (req, res) => {
     const finalName = name || username;
     if (!finalName || !email || !password) return res.status(400).json({ error: "All fields required" });
     const [existingUser, hashed] = await Promise.all([
-      User.findOne({ email }),
-      bcrypt.hash(password, 8)
+      User.findOne({ email }).lean(),
+      bcrypt.hash(password, 6)
     ]);
     if (existingUser) return res.status(409).json({ error: "Email already exists" });
 
@@ -93,7 +106,9 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email })
+      .select('_id name email password role')
+      .lean();
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
@@ -102,7 +117,7 @@ app.post("/api/login", async (req, res) => {
 });
 
 // ✅ Products
-app.get("/api/products", async (_req, res) => {
+app.get("/api/products", cacheMiddleware(300), async (_req, res) => {
   try {
     const products = await Product.find().sort({ createdAt: -1 });
     res.json(products);
@@ -278,9 +293,35 @@ app.use((req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-mongoose.connect(process.env.MONGO_URI)
+
+// Cache database connection for serverless platforms
+let cachedDb = null;
+
+async function connectToDatabase() {
+  if (cachedDb) {
+    return cachedDb;
+  }
+  
+  const opts = {
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+  };
+  
+  cachedDb = await mongoose.connect(process.env.MONGO_URI, opts);
+  return cachedDb;
+}
+
+// Keep-alive ping to prevent cold starts on serverless platforms
+setInterval(() => {
+  if (mongoose.connection.readyState === 1) {
+    mongoose.connection.db.admin().ping().catch(() => {});
+  }
+}, 300000); // Ping every 5 minutes
+
+connectToDatabase()
   .then(() => {
-    console.log("✅ MongoDB connected");
     app.listen(PORT, () => console.log(`🚀 Indian Garment server on port ${PORT}`));
   })
   .catch(err => { console.error("❌ DB connection failed:", err.message); process.exit(1); });
