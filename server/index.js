@@ -6,6 +6,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import path from "path";
 import { fileURLToPath } from "url";
+import compression from "compression";
 
 import User from "./models/User.js";
 import Product from "./models/Product.js";
@@ -18,29 +19,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.use(compression());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
-// Vercel-recommended CORS setup - MANUAL IMPLEMENTATION
+// Optimized CORS setup
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  const allowed = [
-    "https://client-ruddy-rho.vercel.app", 
-    "https://indiangarment.vercel.app",
-    "http://localhost:3000", 
-    "http://localhost:5173"
-  ];
-  
-  if (allowed.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  } else {
-    res.setHeader("Access-Control-Allow-Origin", "https://client-ruddy-rho.vercel.app");
-  }
-
+  res.setHeader("Access-Control-Allow-Origin", origin || "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -65,6 +54,23 @@ const cacheMiddleware = (duration) => {
 };
 
 const JWT_SECRET = process.env.JWT_SECRET || "secret123";
+
+// Simple in-memory cache for user sessions (email -> user data + timestamp)
+const userCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+const getCachedUser = (email) => {
+  const cached = userCache.get(email);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.user;
+  }
+  userCache.delete(email);
+  return null;
+};
+
+const setCachedUser = (email, user) => {
+  userCache.set(email, { user, timestamp: Date.now() });
+};
 
 const makeToken = (user) =>
   jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
@@ -92,11 +98,19 @@ app.post("/api/register", async (req, res) => {
     const { name, username, email, password } = req.body;
     const finalName = name || username;
     if (!finalName || !email || !password) return res.status(400).json({ error: "All fields required" });
+    
+    // Check cache first for existing user
+    const cachedExisting = getCachedUser(email);
+    if (cachedExisting) return res.status(409).json({ error: "Email already exists" });
+    
     const [existingUser, hashed] = await Promise.all([
       User.findOne({ email }).lean(),
       bcrypt.hash(password, 6)
     ]);
-    if (existingUser) return res.status(409).json({ error: "Email already exists" });
+    if (existingUser) {
+      setCachedUser(email, existingUser);
+      return res.status(409).json({ error: "Email already exists" });
+    }
 
     const user = await User.create({ name: finalName, email, password: hashed, role: "user" });
     res.json({ message: "Registered", token: makeToken(user), user: { _id: user._id, name: user.name, email: user.email, role: user.role } });
@@ -106,12 +120,26 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    
+    // Check cache first for recent successful logins
+    const cachedUser = getCachedUser(email);
+    if (cachedUser) {
+      const isMatch = await bcrypt.compare(password, cachedUser.password);
+      if (isMatch) {
+        return res.json({ message: "Login successful", token: makeToken(cachedUser), user: { _id: cachedUser._id, name: cachedUser.name, email: cachedUser.email, role: cachedUser.role } });
+      }
+    }
+    
     const user = await User.findOne({ email })
       .select('_id name email password role')
       .lean();
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
+    
+    // Cache successful login
+    setCachedUser(email, user);
+    
     res.json({ message: "Login successful", token: makeToken(user), user: { _id: user._id, name: user.name, email: user.email, role: user.role } });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
