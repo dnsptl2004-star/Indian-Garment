@@ -6,7 +6,6 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import path from "path";
 import { fileURLToPath } from "url";
-import compression from "compression";
 
 import User from "./models/User.js";
 import Product from "./models/Product.js";
@@ -19,7 +18,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(compression());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
@@ -59,6 +57,10 @@ const JWT_SECRET = process.env.JWT_SECRET || "secret123";
 const userCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// Token cache to avoid repeated JWT verification
+const tokenCache = new Map();
+const TOKEN_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
 const getCachedUser = (email) => {
   const cached = userCache.get(email);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -72,6 +74,19 @@ const setCachedUser = (email, user) => {
   userCache.set(email, { user, timestamp: Date.now() });
 };
 
+const getCachedToken = (token) => {
+  const cached = tokenCache.get(token);
+  if (cached && Date.now() - cached.timestamp < TOKEN_CACHE_TTL) {
+    return cached.user;
+  }
+  tokenCache.delete(token);
+  return null;
+};
+
+const setCachedToken = (token, user) => {
+  tokenCache.set(token, { user, timestamp: Date.now() });
+};
+
 const makeToken = (user) =>
   jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
 
@@ -79,7 +94,16 @@ const protect = (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ error: "No token" });
+    
+    // Check cache first
+    const cachedUser = getCachedToken(token);
+    if (cachedUser) {
+      req.user = cachedUser;
+      return next();
+    }
+    
     req.user = jwt.verify(token, JWT_SECRET);
+    setCachedToken(token, req.user);
     next();
   } catch {
     res.status(401).json({ error: "Invalid token" });
@@ -105,7 +129,7 @@ app.post("/api/register", async (req, res) => {
     
     const [existingUser, hashed] = await Promise.all([
       User.findOne({ email }).lean(),
-      bcrypt.hash(password, 6)
+      bcrypt.hash(password, 4)
     ]);
     if (existingUser) {
       setCachedUser(email, existingUser);
@@ -118,30 +142,60 @@ app.post("/api/register", async (req, res) => {
 });
 
 app.post("/api/login", async (req, res) => {
+  const startTime = Date.now();
   try {
     const { email, password } = req.body;
     
     // Check cache first for recent successful logins
+    const cacheStart = Date.now();
     const cachedUser = getCachedUser(email);
+    const cacheTime = Date.now() - cacheStart;
+    
     if (cachedUser) {
+      const bcryptStart = Date.now();
       const isMatch = await bcrypt.compare(password, cachedUser.password);
+      const bcryptTime = Date.now() - bcryptStart;
       if (isMatch) {
-        return res.json({ message: "Login successful", token: makeToken(cachedUser), user: { _id: cachedUser._id, name: cachedUser.name, email: cachedUser.email, role: cachedUser.role } });
+        const totalTime = Date.now() - startTime;
+        return res.json({ 
+          message: "Login successful", 
+          token: makeToken(cachedUser), 
+          user: { _id: cachedUser._id, name: cachedUser.name, email: cachedUser.email, role: cachedUser.role },
+          timing: { cache: cacheTime, bcrypt: bcryptTime, total: totalTime }
+        });
       }
     }
     
+    const dbStart = Date.now();
     const user = await User.findOne({ email })
       .select('_id name email password role')
-      .lean();
+      .hint({ email: 1 })
+      .lean()
+      .maxTimeMS(5000);
+    const dbTime = Date.now() - dbStart;
+    
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    
+    const bcryptStart = Date.now();
     const isMatch = await bcrypt.compare(password, user.password);
+    const bcryptTime = Date.now() - bcryptStart;
+    
     if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
     
     // Cache successful login
     setCachedUser(email, user);
     
-    res.json({ message: "Login successful", token: makeToken(user), user: { _id: user._id, name: user.name, email: user.email, role: user.role } });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const totalTime = Date.now() - startTime;
+    res.json({ 
+      message: "Login successful", 
+      token: makeToken(user), 
+      user: { _id: user._id, name: user.name, email: user.email, role: user.role },
+      timing: { cache: cacheTime, db: dbTime, bcrypt: bcryptTime, total: totalTime }
+    });
+  } catch (err) { 
+    const totalTime = Date.now() - startTime;
+    res.status(500).json({ error: err.message, timing: { total: totalTime } }); 
+  }
 });
 
 // ✅ Products
