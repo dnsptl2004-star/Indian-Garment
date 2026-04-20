@@ -142,59 +142,45 @@ app.post("/api/register", async (req, res) => {
 });
 
 app.post("/api/login", async (req, res) => {
-  const startTime = Date.now();
   try {
     const { email, password } = req.body;
     
     // Check cache first for recent successful logins
-    const cacheStart = Date.now();
     const cachedUser = getCachedUser(email);
-    const cacheTime = Date.now() - cacheStart;
     
     if (cachedUser) {
-      const bcryptStart = Date.now();
       const isMatch = await bcrypt.compare(password, cachedUser.password);
-      const bcryptTime = Date.now() - bcryptStart;
       if (isMatch) {
-        const totalTime = Date.now() - startTime;
         return res.json({ 
           message: "Login successful", 
           token: makeToken(cachedUser), 
-          user: { _id: cachedUser._id, name: cachedUser.name, email: cachedUser.email, role: cachedUser.role },
-          timing: { cache: cacheTime, bcrypt: bcryptTime, total: totalTime }
+          user: { _id: cachedUser._id, name: cachedUser.name, email: cachedUser.email, role: cachedUser.role }
         });
       }
     }
     
-    const dbStart = Date.now();
     const user = await User.findOne({ email })
       .select('_id name email password role')
       .hint({ email: 1 })
       .lean()
       .maxTimeMS(5000);
-    const dbTime = Date.now() - dbStart;
     
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
     
-    const bcryptStart = Date.now();
     const isMatch = await bcrypt.compare(password, user.password);
-    const bcryptTime = Date.now() - bcryptStart;
     
     if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
     
     // Cache successful login
     setCachedUser(email, user);
     
-    const totalTime = Date.now() - startTime;
     res.json({ 
       message: "Login successful", 
       token: makeToken(user), 
-      user: { _id: user._id, name: user.name, email: user.email, role: user.role },
-      timing: { cache: cacheTime, db: dbTime, bcrypt: bcryptTime, total: totalTime }
+      user: { _id: user._id, name: user.name, email: user.email, role: user.role }
     });
   } catch (err) { 
-    const totalTime = Date.now() - startTime;
-    res.status(500).json({ error: err.message, timing: { total: totalTime } }); 
+    res.status(500).json({ error: err.message }); 
   }
 });
 
