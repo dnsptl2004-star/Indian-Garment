@@ -43,6 +43,21 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// Warmup endpoint to pre-load resources and keep server warm
+app.get("/warmup", async (req, res) => {
+  try {
+    // Pre-load database connection
+    if (mongoose.connection.readyState !== 1) {
+      await connectToDatabase();
+    }
+    // Pre-warm with a simple query
+    await User.findOne().limit(1).lean().catch(() => {});
+    res.status(200).json({ status: "warmed", timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  }
+});
+
 // Cache middleware for static responses
 const cacheMiddleware = (duration) => {
   return (req, res, next) => {
@@ -129,7 +144,7 @@ app.post("/api/register", async (req, res) => {
     
     const [existingUser, hashed] = await Promise.all([
       User.findOne({ email }).lean(),
-      bcrypt.hash(password, 4)
+      bcrypt.hash(password, 3)
     ]);
     if (existingUser) {
       setCachedUser(email, existingUser);
@@ -371,10 +386,11 @@ async function connectToDatabase() {
   }
   
   const opts = {
-    maxPoolSize: 10,
-    minPoolSize: 2,
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
+    maxPoolSize: 5,
+    minPoolSize: 1,
+    serverSelectionTimeoutMS: 3000,
+    socketTimeoutMS: 30000,
+    connectTimeoutMS: 5000,
   };
   
   cachedDb = await mongoose.connect(process.env.MONGO_URI, opts);
@@ -386,7 +402,7 @@ setInterval(() => {
   if (mongoose.connection.readyState === 1) {
     mongoose.connection.db.admin().ping().catch(() => {});
   }
-}, 300000); // Ping every 5 minutes
+}, 120000); // Ping every 2 minutes
 
 connectToDatabase()
   .then(() => {
