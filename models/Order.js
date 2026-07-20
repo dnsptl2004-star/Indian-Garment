@@ -39,4 +39,9 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+orderSchema.index({ "user.email": 1 });
+orderSchema.index({ createdAt: -1 });
+orderSchema.index({ orderStatus: 1 });
+orderSchema.index({ paymentStatus: 1 });
+
 export default mongoose.models.Order || mongoose.model("Order", orderSchema);

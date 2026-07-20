@@ -6,6 +6,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import path from "path";
 import { fileURLToPath } from "url";
+import compression from "compression";
 
 import User from "./models/User.js";
 import Product from "./models/Product.js";
@@ -18,9 +19,34 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.use(compression());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Simple in-memory cache with TTL
+const cache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+const getCache = (key) => {
+  const item = cache.get(key);
+  if (!item) return null;
+  if (Date.now() > item.expiry) {
+    cache.delete(key);
+    return null;
+  }
+  return item.data;
+};
+
+const setCache = (key, data) => {
+  cache.set(key, { data, expiry: Date.now() + CACHE_TTL });
+};
+
+const clearCache = (pattern) => {
+  for (const key of cache.keys()) {
+    if (key.includes(pattern)) cache.delete(key);
+  }
+};
 
 // Vercel-recommended CORS setup - MANUAL IMPLEMENTATION
 app.use((req, res, next) => {
@@ -116,14 +142,22 @@ app.post("/api/login", async (req, res) => {
 // ✅ Products
 app.get("/api/products", async (_req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
+    const cached = getCache('products');
+    if (cached) return res.json(cached);
+    
+    const products = await Product.find().sort({ createdAt: -1 }).lean();
+    setCache('products', products);
     res.json(products);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get("/api/admin/products", protect, adminOnly, async (req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
+    const cached = getCache('products');
+    if (cached) return res.json(cached);
+    
+    const products = await Product.find().sort({ createdAt: -1 }).lean();
+    setCache('products', products);
     res.json(products);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -131,6 +165,7 @@ app.get("/api/admin/products", protect, adminOnly, async (req, res) => {
 app.post("/api/admin/products", protect, adminOnly, async (req, res) => {
   try {
     const product = await Product.create(req.body);
+    clearCache('products');
     res.status(201).json(product);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -138,6 +173,7 @@ app.post("/api/admin/products", protect, adminOnly, async (req, res) => {
 app.put("/api/admin/products/:id", protect, adminOnly, async (req, res) => {
   try {
     const product = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    clearCache('products');
     res.json(product);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -145,6 +181,7 @@ app.put("/api/admin/products/:id", protect, adminOnly, async (req, res) => {
 app.delete("/api/admin/products/:id", protect, adminOnly, async (req, res) => {
   try {
     await Product.findByIdAndDelete(req.params.id);
+    clearCache('products');
     res.json({ message: "Product deleted" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -152,7 +189,7 @@ app.delete("/api/admin/products/:id", protect, adminOnly, async (req, res) => {
 // ✅ Addresses
 app.get("/api/checkout/addresses/:email", async (req, res) => {
   try {
-    const data = await Address.find({ userEmail: req.params.email }).sort({ createdAt: -1 });
+    const data = await Address.find({ userEmail: req.params.email }).sort({ createdAt: -1 }).lean();
     res.json(data);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -169,7 +206,7 @@ app.get("/api/checkout/orders/:email", async (req, res) => {
   try {
     const email = req.params.email || req.query.email;
     if (!email) return res.status(400).json({ error: "Email required" });
-    const orders = await Order.find({ "user.email": email }).sort({ createdAt: -1 });
+    const orders = await Order.find({ "user.email": email }).sort({ createdAt: -1 }).lean();
     res.json(orders);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -194,6 +231,7 @@ app.post("/api/checkout/create-order", async (req, res) => {
       paymentStatus: "pending", 
       orderStatus: "pending" 
     });
+    clearCache('admin-summary');
     const upiUrl = paymentMethod === "upi"
       ? `upi://pay?pa=indiangarment@upi&pn=IndianGarment&am=${totalAmount}&cu=INR`
       : null;
@@ -232,6 +270,9 @@ app.delete("/api/checkout/orders/:id", async (req, res) => {
 // ✅ Admin routes - inline
 app.get("/api/admin/summary", protect, adminOnly, async (req, res) => {
   try {
+    const cached = getCache('admin-summary');
+    if (cached) return res.json(cached);
+    
     const [users, products, orders] = await Promise.all([
       User.countDocuments(), Product.countDocuments(), Order.countDocuments()
     ]);
@@ -239,28 +280,25 @@ app.get("/api/admin/summary", protect, adminOnly, async (req, res) => {
       { $match: { orderStatus: "delivered" } },
       { $group: { _id: null, total: { $sum: "$totalAmount" } } }
     ]);
-    res.json({ users, products, orders, revenue: revenue[0]?.total || 0 });
+    const summary = { users, products, orders, revenue: revenue[0]?.total || 0 };
+    setCache('admin-summary', summary);
+    res.json(summary);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get("/api/admin/users", protect, adminOnly, async (req, res) => {
-  try { res.json(await User.find().select("-password").sort({ createdAt: -1 })); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.get("/api/admin/products", protect, adminOnly, async (req, res) => {
-  try { res.json(await Product.find().sort({ createdAt: -1 })); }
+  try { res.json(await User.find().select("-password").sort({ createdAt: -1 }).lean()); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get("/api/admin/orders", protect, adminOnly, async (req, res) => {
-  try { res.json(await Order.find().sort({ createdAt: -1 })); }
+  try { res.json(await Order.find().sort({ createdAt: -1 }).lean()); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get("/api/admin/addresses", protect, adminOnly, async (req, res) => {
   try {
-    const addresses = await Address.find().sort({ createdAt: -1 });
+    const addresses = await Address.find().sort({ createdAt: -1 }).lean();
     res.json(addresses || []);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -273,6 +311,7 @@ app.patch("/api/admin/orders/:id/status", protect, adminOnly, async (req, res) =
     if (orderStatus !== undefined) update.orderStatus = orderStatus;
     const order = await Order.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
     if (!order) return res.status(404).json({ error: "Order not found" });
+    clearCache('admin-summary');
     res.json(order);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -289,9 +328,18 @@ app.use((req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-mongoose.connect(process.env.MONGO_URI)
+
+mongoose.connect(process.env.MONGO_URI, {
+  maxPoolSize: 50,
+  minPoolSize: 5,
+  socketTimeoutMS: 45000,
+  serverSelectionTimeoutMS: 5000,
+  connectTimeoutMS: 10000,
+  retryWrites: true,
+  w: 'majority'
+})
   .then(() => {
-    console.log("✅ MongoDB connected");
+    console.log("✅ MongoDB connected with optimized pool");
     app.listen(PORT, () => console.log(`🚀 Indian Garment server on port ${PORT}`));
   })
   .catch(err => { console.error("❌ DB connection failed:", err.message); process.exit(1); });
