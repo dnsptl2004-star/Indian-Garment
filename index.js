@@ -19,7 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(compression());
+app.use(compression({ level: 6, threshold: 1024 }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -33,7 +33,30 @@ app.use((req, res, next) => {
 
 // Simple in-memory cache with TTL
 const cache = new Map();
-const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+
+// Query memoization cache for single document lookups
+const queryMemo = new Map();
+const MEMO_TTL = 2 * 60 * 1000; // 2 minutes
+
+const getMemo = (key) => {
+  const item = queryMemo.get(key);
+  if (!item) return null;
+  if (Date.now() > item.expiry) {
+    queryMemo.delete(key);
+    return null;
+  }
+  return item.data;
+};
+
+const setMemo = (key, data) => {
+  queryMemo.set(key, { data, expiry: Date.now() + MEMO_TTL });
+};
+
+// Cache key generator (faster than template strings)
+const getCacheKey = (prefix, ...parts) => {
+  return prefix + parts.join('-');
+};
 
 const getCache = (key) => {
   const item = cache.get(key);
@@ -49,6 +72,20 @@ const setCache = (key, data) => {
   const etag = Buffer.from(JSON.stringify(data)).toString('base64');
   cache.set(key, { data, expiry: Date.now() + CACHE_TTL, etag });
   return etag;
+};
+
+// Fast JSON response helper
+const sendJSON = (res, data, etag) => {
+  if (etag) res.setHeader('ETag', etag);
+  res.setHeader('Content-Type', 'application/json');
+  res.send(JSON.stringify(data));
+};
+
+// Fast image URL optimizer
+const optimizeImageUrl = (img) => {
+  if (!img) return 'https://via.placeholder.com/400x500?text=No+Image';
+  if (img.startsWith('http://')) return img.replace('http://', 'https://');
+  return img;
 };
 
 const clearCache = (pattern) => {
@@ -217,7 +254,14 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const memoKey = `user-${email}`;
+    let user = getMemo(memoKey);
+    
+    if (!user) {
+      user = await User.findOne({ email });
+      if (user) setMemo(memoKey, user);
+    }
+    
     if (!user || !(await bcrypt.compare(password, user.password)))
       return res.status(401).json({ error: "Invalid credentials" });
     res.json({ message: "Login successful", token: makeToken(user), user: { _id: user._id, name: user.name, email: user.email, role: user.role } });
@@ -230,7 +274,7 @@ app.get("/api/products", async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
-    const cacheKey = `products-page-${page}-limit-${limit}`;
+    const cacheKey = getCacheKey('products-page', page, 'limit', limit);
     
     const cachedItem = cache.get(cacheKey);
     if (cachedItem && Date.now() <= cachedItem.expiry) {
@@ -242,20 +286,24 @@ app.get("/api/products", async (req, res) => {
       return res.json(cachedItem.data);
     }
     
-    const products = await Product.find()
-      .select('_id name category price discountPrice img inStock ratings reviews')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    // Parallel execution for faster response
+    const [products, total] = await Promise.all([
+      Product.find()
+        .select('_id name category price discountPrice img inStock ratings reviews')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .hint({ createdAt: -1 })
+        .lean(),
+      Product.countDocuments()
+    ]);
     
     // Optimize image URLs for faster loading
     const optimizedProducts = products.map(p => ({
       ...p,
-      img: p.img ? p.img.replace('http://', 'https://') : 'https://via.placeholder.com/400x500?text=No+Image'
+      img: optimizeImageUrl(p.img)
     }));
     
-    const total = await Product.countDocuments();
     const response = { products: optimizedProducts, total, page, pages: Math.ceil(total / limit) };
     const etag = setCache(cacheKey, response);
     res.setHeader('ETag', etag);
@@ -272,36 +320,34 @@ app.get("/api/products/search", async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
-    const cacheKey = `products-search-${q}-page-${page}-limit-${limit}`;
+    const cacheKey = getCacheKey('products-search', q, 'page', page, 'limit', limit);
     
     const cached = getCache(cacheKey);
     if (cached) return res.json(cached);
     
-    const products = await Product.find({
+    const searchQuery = {
       $or: [
         { name: { $regex: q, $options: 'i' } },
         { category: { $regex: q, $options: 'i' } },
         { brand: { $regex: q, $options: 'i' } }
       ]
-    })
-      .select('_id name category price discountPrice img inStock ratings reviews')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    };
+    
+    // Parallel execution for search
+    const [products, total] = await Promise.all([
+      Product.find(searchQuery)
+        .select('_id name category price discountPrice img inStock ratings reviews')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Product.countDocuments(searchQuery)
+    ]);
     
     const optimizedProducts = products.map(p => ({
       ...p,
-      img: p.img ? p.img.replace('http://', 'https://') : 'https://via.placeholder.com/400x500?text=No+Image'
+      img: optimizeImageUrl(p.img)
     }));
-    
-    const total = await Product.countDocuments({
-      $or: [
-        { name: { $regex: q, $options: 'i' } },
-        { category: { $regex: q, $options: 'i' } },
-        { brand: { $regex: q, $options: 'i' } }
-      ]
-    });
     
     const response = { products: optimizedProducts, total, page, pages: Math.ceil(total / limit) };
     setCache(cacheKey, response);
