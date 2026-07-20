@@ -26,7 +26,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Simple in-memory cache with TTL
 const cache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 const getCache = (key) => {
   const item = cache.get(key);
@@ -140,25 +140,102 @@ app.post("/api/login", async (req, res) => {
 });
 
 // ✅ Products
-app.get("/api/products", async (_req, res) => {
+app.get("/api/products", async (req, res) => {
   try {
-    const cached = getCache('products');
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    const cacheKey = `products-page-${page}-limit-${limit}`;
+    
+    const cached = getCache(cacheKey);
     if (cached) return res.json(cached);
     
-    const products = await Product.find().sort({ createdAt: -1 }).lean();
-    setCache('products', products);
-    res.json(products);
+    const products = await Product.find()
+      .select('_id name category price discountPrice img inStock ratings reviews')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    
+    // Optimize image URLs for faster loading
+    const optimizedProducts = products.map(p => ({
+      ...p,
+      img: p.img ? p.img.replace('http://', 'https://') : 'https://via.placeholder.com/400x500?text=No+Image'
+    }));
+    
+    const total = await Product.countDocuments();
+    const response = { products: optimizedProducts, total, page, pages: Math.ceil(total / limit) };
+    setCache(cacheKey, response);
+    res.json(response);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ✅ Product Search
+app.get("/api/products/search", async (req, res) => {
+  try {
+    const q = req.query.q || '';
+    if (!q) return res.json({ products: [], total: 0 });
+    
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    const cacheKey = `products-search-${q}-page-${page}-limit-${limit}`;
+    
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
+    
+    const products = await Product.find({
+      $or: [
+        { name: { $regex: q, $options: 'i' } },
+        { category: { $regex: q, $options: 'i' } },
+        { brand: { $regex: q, $options: 'i' } }
+      ]
+    })
+      .select('_id name category price discountPrice img inStock ratings reviews')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    
+    const optimizedProducts = products.map(p => ({
+      ...p,
+      img: p.img ? p.img.replace('http://', 'https://') : 'https://via.placeholder.com/400x500?text=No+Image'
+    }));
+    
+    const total = await Product.countDocuments({
+      $or: [
+        { name: { $regex: q, $options: 'i' } },
+        { category: { $regex: q, $options: 'i' } },
+        { brand: { $regex: q, $options: 'i' } }
+      ]
+    });
+    
+    const response = { products: optimizedProducts, total, page, pages: Math.ceil(total / limit) };
+    setCache(cacheKey, response);
+    res.json(response);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get("/api/admin/products", protect, adminOnly, async (req, res) => {
   try {
-    const cached = getCache('products');
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+    const cacheKey = `admin-products-page-${page}-limit-${limit}`;
+    
+    const cached = getCache(cacheKey);
     if (cached) return res.json(cached);
     
-    const products = await Product.find().sort({ createdAt: -1 }).lean();
-    setCache('products', products);
-    res.json(products);
+    const products = await Product.find()
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    
+    const total = await Product.countDocuments();
+    const response = { products, total, page, pages: Math.ceil(total / limit) };
+    setCache(cacheKey, response);
+    res.json(response);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -166,6 +243,7 @@ app.post("/api/admin/products", protect, adminOnly, async (req, res) => {
   try {
     const product = await Product.create(req.body);
     clearCache('products');
+    clearCache('admin-products');
     res.status(201).json(product);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -174,6 +252,7 @@ app.put("/api/admin/products/:id", protect, adminOnly, async (req, res) => {
   try {
     const product = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
     clearCache('products');
+    clearCache('admin-products');
     res.json(product);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -182,6 +261,7 @@ app.delete("/api/admin/products/:id", protect, adminOnly, async (req, res) => {
   try {
     await Product.findByIdAndDelete(req.params.id);
     clearCache('products');
+    clearCache('admin-products');
     res.json({ message: "Product deleted" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
