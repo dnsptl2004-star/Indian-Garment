@@ -24,6 +24,13 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// HTTP caching headers middleware
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'public, max-age=300'); // 5 minutes
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+});
+
 // Simple in-memory cache with TTL
 const cache = new Map();
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
@@ -39,13 +46,91 @@ const getCache = (key) => {
 };
 
 const setCache = (key, data) => {
-  cache.set(key, { data, expiry: Date.now() + CACHE_TTL });
+  const etag = Buffer.from(JSON.stringify(data)).toString('base64');
+  cache.set(key, { data, expiry: Date.now() + CACHE_TTL, etag });
+  return etag;
 };
 
 const clearCache = (pattern) => {
   for (const key of cache.keys()) {
     if (key.includes(pattern)) cache.delete(key);
   }
+};
+
+// Cache pre-warming on server startup
+const warmCache = async () => {
+  try {
+    console.log('🔥 Warming up cache...');
+    
+    // Pre-warm first page of products
+    const products = await Product.find()
+      .select('_id name category price discountPrice img inStock ratings reviews')
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+    
+    const optimizedProducts = products.map(p => ({
+      ...p,
+      img: p.img ? p.img.replace('http://', 'https://') : 'https://via.placeholder.com/400x500?text=No+Image'
+    }));
+    
+    const total = await Product.countDocuments();
+    setCache('products-page-1-limit-20', { products: optimizedProducts, total, page: 1, pages: Math.ceil(total / 20) });
+    
+    // Pre-warm admin summary
+    const [users, productsCount, orders] = await Promise.all([
+      User.countDocuments(), 
+      Product.countDocuments(), 
+      Order.countDocuments()
+    ]);
+    const revenue = await Order.aggregate([
+      { $match: { orderStatus: "delivered" } },
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+    ]);
+    setCache('admin-summary', { users, products: productsCount, orders, revenue: revenue[0]?.total || 0 });
+    
+    console.log('✅ Cache warmed successfully');
+  } catch (err) {
+    console.error('❌ Cache warming failed:', err.message);
+  }
+};
+
+// Background cache refresh strategy
+const startBackgroundRefresh = () => {
+  setInterval(async () => {
+    try {
+      // Refresh first page of products
+      const products = await Product.find()
+        .select('_id name category price discountPrice img inStock ratings reviews')
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+      
+      const optimizedProducts = products.map(p => ({
+        ...p,
+        img: p.img ? p.img.replace('http://', 'https://') : 'https://via.placeholder.com/400x500?text=No+Image'
+      }));
+      
+      const total = await Product.countDocuments();
+      setCache('products-page-1-limit-20', { products: optimizedProducts, total, page: 1, pages: Math.ceil(total / 20) });
+      
+      // Refresh admin summary
+      const [users, productsCount, orders] = await Promise.all([
+        User.countDocuments(), 
+        Product.countDocuments(), 
+        Order.countDocuments()
+      ]);
+      const revenue = await Order.aggregate([
+        { $match: { orderStatus: "delivered" } },
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+      ]);
+      setCache('admin-summary', { users, products: productsCount, orders, revenue: revenue[0]?.total || 0 });
+      
+      console.log('🔄 Background cache refreshed');
+    } catch (err) {
+      console.error('❌ Background refresh failed:', err.message);
+    }
+  }, 5 * 60 * 1000); // Refresh every 5 minutes
 };
 
 // Vercel-recommended CORS setup - MANUAL IMPLEMENTATION
@@ -147,8 +232,15 @@ app.get("/api/products", async (req, res) => {
     const skip = (page - 1) * limit;
     const cacheKey = `products-page-${page}-limit-${limit}`;
     
-    const cached = getCache(cacheKey);
-    if (cached) return res.json(cached);
+    const cachedItem = cache.get(cacheKey);
+    if (cachedItem && Date.now() <= cachedItem.expiry) {
+      const clientEtag = req.headers['if-none-match'];
+      if (clientEtag === cachedItem.etag) {
+        return res.status(304).end();
+      }
+      res.setHeader('ETag', cachedItem.etag);
+      return res.json(cachedItem.data);
+    }
     
     const products = await Product.find()
       .select('_id name category price discountPrice img inStock ratings reviews')
@@ -165,7 +257,8 @@ app.get("/api/products", async (req, res) => {
     
     const total = await Product.countDocuments();
     const response = { products: optimizedProducts, total, page, pages: Math.ceil(total / limit) };
-    setCache(cacheKey, response);
+    const etag = setCache(cacheKey, response);
+    res.setHeader('ETag', etag);
     res.json(response);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -418,8 +511,15 @@ mongoose.connect(process.env.MONGO_URI, {
   retryWrites: true,
   w: 'majority'
 })
-  .then(() => {
+  .then(async () => {
     console.log("✅ MongoDB connected with optimized pool");
-    app.listen(PORT, () => console.log(`🚀 Indian Garment server on port ${PORT}`));
+    await warmCache();
+    startBackgroundRefresh();
+    
+    const server = app.listen(PORT, () => console.log(`🚀 Indian Garment server on port ${PORT}`));
+    
+    // Enable keep-alive for faster connections
+    server.keepAliveTimeout = 65000;
+    server.headersTimeout = 66000;
   })
   .catch(err => { console.error("❌ DB connection failed:", err.message); process.exit(1); });
